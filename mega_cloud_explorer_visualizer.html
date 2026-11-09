@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MEGA Inspector Pro — Visualizador y Explorador de Carpetas</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            mega: {
+              50: '#fff1f2',
+              100: '#ffe4e6',
+              400: '#fb7185',
+              500: '#f43f5e',
+              600: '#d9272e',
+              700: '#b91c1c',
+            },
+            slate: {
+              850: '#131c2e',
+              900: '#0f172a',
+              950: '#070b14',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(71, 85, 105, 0.6);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(244, 63, 94, 0.7);
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.04); }
+    }
+    .animate-glow {
+      animation: pulseGlow 3s infinite ease-in-out;
+    }
+    
+    .glass-panel {
+      background: rgba(19, 28, 46, 0.78);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col selection:bg-mega-500 selection:text-white overflow-x-hidden">
+
+  <!-- Ambient Background Glow -->
+  <div class="fixed inset-0 pointer-events-none overflow-hidden z-0">
+    <div class="absolute -top-40 -left-40 w-96 h-96 bg-mega-600/10 rounded-full blur-3xl"></div>
+    <div class="absolute top-1/3 -right-40 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl"></div>
+  </div>
+
+  <!-- Top Header -->
+  <header class="sticky top-0 z-30 border-b border-slate-800/80 glass-panel">
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-mega-500 to-red-700 flex items-center justify-center shadow-lg shadow-mega-600/25 border border-white/10">
+          <span class="font-bold text-xl tracking-tighter text-white">M</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-base sm:text-lg tracking-tight text-white">MEGA Inspector <span class="text-mega-500">Web</span></h1>
+            <span id="connectionBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              E2E Client-Side
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Descifrado de metadatos AES y previsualización directa en navegador</p>
+        </div>
+      </div>
+
+      <!-- Header Actions -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button id="btnDemoMode" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition cursor-pointer" title="Cargar estructura de demostración">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>Modo Demo</span>
+        </button>
+
+        <button id="btnExportTree" type="button" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition cursor-pointer" title="Exportar listado de archivos en JSON">
+          <i data-lucide="file-json" class="w-3.5 h-3.5 text-sky-400"></i>
+          <span>Exportar Índice</span>
+        </button>
+
+        <button id="btnOpenNodeModal" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-mega-500/15 hover:bg-mega-500/25 text-mega-400 border border-mega-500/30 transition cursor-pointer">
+          <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
+          <span>Servidor Local / CLI</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="relative z-10 flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-5 flex flex-col gap-5">
+
+    <!-- URL Input Bar Card -->
+    <section class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+      <form id="megaUrlForm" class="flex flex-col md:flex-row gap-3">
+        <div class="flex-1 relative">
+          <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <i data-lucide="link-2" class="w-4 h-4 text-mega-400"></i>
+          </div>
+          <input
+            id="megaUrlInput"
+            type="url"
+            required
+            value="https://mega.nz/folder/bHABmLDA#7rv6CdKTUsXxN-q9mkOhfA"
+            placeholder="Pega aquí el enlace de carpeta o archivo de MEGA (https://mega.nz/folder/...#...)"
+            class="w-full pl-10 pr-24 py-3 bg-slate-950/90 border border-slate-700/80 focus:border-mega-500 focus:ring-2 focus:ring-mega-500/20 rounded-xl text-sm text-white placeholder-slate-500 font-mono transition outline-none"
+          />
+          <button
+            type="button"
+            id="btnClearUrl"
+            class="absolute inset-y-0 right-2 my-auto h-7 px-2.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center gap-1"
+            title="Limpiar campo"
+          >
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Limpiar</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            type="submit"
+            id="btnSubmitUrl"
+            class="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-mega-600 to-mega-500 hover:from-mega-500 hover:to-mega-400 text-white shadow-lg shadow-mega-600/25 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <i data-lucide="folder-search" class="w-4 h-4"></i>
+            <span>Explorar Carpeta</span>
+          </button>
+
+          <a
+            id="btnOpenExternal"
+            href="https://mega.nz/folder/bHABmLDA#7rv6CdKTUsXxN-q9mkOhfA"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center justify-center p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+            title="Abrir enlace original en una nueva pestaña de MEGA.nz"
+          >
+            <i data-lucide="external-link" class="w-4 h-4"></i>
+          </a>
+        </div>
+      </form>
+
+      <!-- Quick Info / Key Pill Bar -->
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="inline-flex items-center gap-1.5">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+            Clave detectada: <code id="detectedKeyBadge" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 font-mono">7rv6CdKTUsXxN-q9mkOhfA</code>
+          </span>
+          <span class="hidden sm:inline text-slate-600">•</span>
+          <span class="inline-flex items-center gap-1.5">
+            <i data-lucide="hash" class="w-3.5 h-3.5 text-sky-400"></i>
+            ID Público: <code id="detectedIdBadge" class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 font-mono">bHABmLDA</code>
+          </span>
+          <span class="hidden sm:inline text-slate-600">•</span>
+          <span class="inline-flex items-center gap-1.5">
+            <i data-lucide="globe" class="w-3.5 h-3.5 text-amber-400"></i>
+            Conexión:
+            <select id="corsModeSelect" class="bg-slate-800 text-slate-200 text-xs px-2 py-0.5 rounded border border-slate-700 outline-none">
+              <option value="direct">Directa (Browser E2E)</option>
+              <option value="proxy">Proxy CORS (Bypass)</option>
+            </select>
+          </span>
+        </div>
+        <div id="statusMessageInline" class="text-slate-400 flex items-center gap-1.5">
+          <span>Listo para inspeccionar</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Error / Warning Banner (Hidden by default) -->
+    <div id="errorBanner" class="hidden bg-red-950/60 border border-red-500/40 rounded-2xl p-4 sm:p-5 text-red-200 shadow-lg">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <div class="p-2 rounded-xl bg-red-500/20 text-red-400 shrink-0 mt-0.5">
+            <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="errorBannerTitle" class="font-semibold text-sm text-white">No se pudo conectar con la carpeta de MEGA</h3>
+            <p id="errorBannerDesc" class="text-xs text-red-200/90 mt-1 leading-relaxed">
+              Verifica que el enlace incluya la clave de descifrado después del signo # y que la carpeta siga activa.
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="btnRetryLoad" type="button" class="px-3.5 py-2 rounded-xl text-xs font-medium bg-red-500/20 hover:bg-red-500/30 text-white border border-red-400/30 transition">
+            Reintentar conexión
+          </button>
+          <button id="btnBannerDemo" type="button" class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 transition">
+            Cargar Modo Demostración
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Skeleton / Decryption Progress State -->
+    <section id="loadingSection" class="hidden bg-slate-900/70 border border-slate-800 rounded-2xl p-10 text-center flex flex-col items-center justify-center gap-4">
+      <div class="relative w-16 h-16 flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full border-4 border-mega-500/20"></div>
+        <div class="absolute inset-0 rounded-full border-4 border-mega-500 border-t-transparent animate-spin"></div>
+        <i data-lucide="unlock" class="w-6 h-6 text-mega-400"></i>
+      </div>
+      <div class="max-w-md">
+        <h3 id="loadingTitle" class="text-base font-semibold text-white">Conectando con la API de MEGA...</h3>
+        <p id="loadingSubtitle" class="text-xs text-slate-400 mt-1">
+          Descargando nodos cifrados y aplicando llave AES en el navegador...
+        </p>
+      </div>
+    </section>
+
+    <!-- Statistics & Distribution Overview -->
+    <section id="statsSection" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <!-- Root Folder Card -->
+      <div class="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-xl bg-mega-500/15 border border-mega-500/30 flex items-center justify-center text-mega-400 shrink-0">
+          <i data-lucide="folder-root" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs text-slate-400">Contenedor Raíz</p>
+          <h2 id="statRootName" class="font-semibold text-sm sm:text-base text-white truncate" title="Cargando...">—</h2>
+          <p id="statSourceType" class="text-[11px] text-slate-500 truncate">Esperando lectura</p>
+        </div>
+      </div>
+
+      <!-- Total Size Card -->
+      <div class="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+          <i data-lucide="hard-drive" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400">Tamaño Total Calculado</p>
+          <h2 id="statTotalSize" class="font-semibold text-sm sm:text-base text-white">0 B</h2>
+          <p id="statLargestFile" class="text-[11px] text-slate-500 truncate">Sin archivos procesados</p>
+        </div>
+      </div>
+
+      <!-- Total Files & Folders Card -->
+      <div class="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+          <i data-lucide="files" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400">Estructura del Contenedor</p>
+          <div class="flex items-baseline gap-2">
+            <h2 id="statFileCount" class="font-semibold text-sm sm:text-base text-white">0 archivos</h2>
+            <span id="statFolderCount" class="text-xs text-slate-400">(0 carpetas)</span>
+          </div>
+          <p class="text-[11px] text-slate-500">Árbol recursivo completo</p>
+        </div>
+      </div>
+
+      <!-- Distribution Card -->
+      <div class="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 flex flex-col justify-between">
+        <div class="flex items-center justify-between text-xs mb-1.5">
+          <span class="text-slate-400 font-medium">Distribución por Tipo</span>
+          <span id="statTopCategory" class="text-slate-300 font-mono text-[11px]">—</span>
+        </div>
+        <!-- Multi-segment progress bar -->
+        <div id="distributionBar" class="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden flex gap-0.5 p-0.5">
+          <div class="h-full bg-slate-700 w-full rounded-full"></div>
+        </div>
+        <div id="distributionLegend" class="flex items-center justify-between gap-2 text-[11px] text-slate-400 mt-2 truncate">
+          <span>Imágenes, Video, Docs, Otros</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Explorer Workspace -->
+    <section class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[520px]">
+
+      <!-- Sidebar Directory Tree (3 cols on large screens) -->
+      <aside class="lg:col-span-3 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col overflow-hidden">
+        <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="folder-tree" class="w-4 h-4 text-mega-400"></i>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-300">Árbol de Directorios</span>
+          </div>
+          <button id="btnExpandAllTree" type="button" class="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800/80 transition" title="Expandir o contraer todo">
+            Expandir
+          </button>
+        </div>
+
+        <div id="directoryTreeContainer" class="flex-1 p-2.5 overflow-y-auto max-h-[320px] lg:max-h-[600px] space-y-0.5 text-sm">
+          <div class="text-xs text-slate-500 p-4 text-center">
+            Explora un enlace para visualizar el árbol de subcarpetas.
+          </div>
+        </div>
+
+        <!-- Storage Quota Note -->
+        <div class="p-3 bg-slate-950/60 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-start gap-2">
+          <i data-lucide="info" class="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5"></i>
+          <span>Haz clic en cualquier archivo para previsualizarlo o descargarlo desencriptado en tu navegador.</span>
+        </div>
+      </aside>
+
+      <!-- Explorer Main View (9 cols on large screens) -->
+      <div class="lg:col-span-9 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col overflow-hidden">
+
+        <!-- Explorer Toolbar -->
+        <div class="p-3.5 border-b border-slate-800 flex flex-col gap-3">
+          <!-- Row 1: Breadcrumbs + View Mode Switcher -->
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <!-- Breadcrumbs -->
+            <nav id="breadcrumbsNav" aria-label="Breadcrumb" class="flex items-center flex-wrap gap-1 text-xs sm:text-sm overflow-x-auto py-0.5">
+              <span class="text-slate-500">Raíz</span>
+            </nav>
+
+            <!-- Right Controls: Global Search Toggle & View Switcher -->
+            <div class="flex items-center gap-2">
+              <label class="inline-flex items-center gap-1.5 text-xs text-slate-300 bg-slate-950/80 border border-slate-800 px-2.5 py-1.5 rounded-lg cursor-pointer select-none">
+                <input type="checkbox" id="chkRecursiveView" class="rounded bg-slate-800 border-slate-700 text-mega-500 focus:ring-0" />
+                <span>Incluir subcarpetas</span>
+              </label>
+
+              <div class="inline-flex rounded-lg bg-slate-950 p-0.5 border border-slate-800">
+                <button id="btnViewTable" type="button" class="px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-white transition flex items-center gap-1" title="Vista de tabla">
+                  <i data-lucide="list" class="w-3.5 h-3.5"></i>
+                  <span class="hidden sm:inline">Lista</span>
+                </button>
+                <button id="btnViewGrid" type="button" class="px-2.5 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white transition flex items-center gap-1" title="Vista de cuadrícula">
+                  <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+                  <span class="hidden sm:inline">Cuadrícula</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 2: Search Input + Category Filter + Sort Selector -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+            <!-- Search box -->
+            <div class="sm:col-span-5 relative">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+              <input
+                id="searchInput"
+                type="text"
+                placeholder="Buscar archivos o carpetas por nombre..."
+                class="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 focus:border-mega-500 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 outline-none transition"
+              />
+              <button id="btnClearSearch" type="button" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+
+            <!-- Type filter -->
+            <div class="sm:col-span-4">
+              <select
+                id="filterCategorySelect"
+                class="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-mega-500 rounded-xl text-xs sm:text-sm text-slate-200 outline-none transition"
+              >
+                <option value="all">Todos los tipos</option>
+                <option value="folder">Solo Carpetas</option>
+                <option value="image">Imágenes (JPG, PNG, WEBP, SVG)</option>
+                <option value="video">Videos (MP4, MKV, WEBM, MOV)</option>
+                <option value="audio">Audio (MP3, WAV, FLAC, OGG)</option>
+                <option value="document">Documentos y PDF</option>
+                <option value="archive">Comprimidos (ZIP, RAR, 7Z, TAR)</option>
+                <option value="code">Código y Texto (JS, PY, JSON, MD, TXT)</option>
+              </select>
+            </div>
+
+            <!-- Sort selector -->
+            <div class="sm:col-span-3 flex gap-1.5">
+              <select
+                id="sortFieldSelect"
+                class="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 focus:border-mega-500 rounded-xl text-xs sm:text-sm text-slate-200 outline-none transition"
+              >
+                <option value="name">Ordenar: Nombre</option>
+                <option value="size">Ordenar: Tamaño</option>
+                <option value="type">Ordenar: Tipo</option>
+                <option value="date">Ordenar: Fecha</option>
+              </select>
+              <button
+                id="btnSortOrder"
+                type="button"
+                class="px-2.5 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl text-slate-300 hover:text-white transition flex items-center justify-center"
+                title="Cambiar dirección de ordenamiento"
+              >
+                <i data-lucide="arrow-up-down" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- File List / Grid Content Area -->
+        <div class="flex-1 overflow-y-auto max-h-[600px] relative">
+          <!-- Table View -->
+          <table id="filesTableView" class="w-full text-left border-collapse">
+            <thead class="sticky top-0 z-10 bg-slate-950/95 backdrop-blur border-b border-slate-800 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <tr>
+                <th class="py-3 pl-4 pr-2">Nombre del Elemento</th>
+                <th class="py-3 px-3 hidden sm:table-cell">Categoría</th>
+                <th class="py-3 px-3 text-right">Tamaño</th>
+                <th class="py-3 px-3 hidden md:table-cell text-right">Modificado</th>
+                <th class="py-3 pl-2 pr-4 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="filesTableBody" class="divide-y divide-slate-800/60 text-sm">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+
+          <!-- Grid View -->
+          <div id="filesGridView" class="hidden p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+            <!-- Populated dynamically -->
+          </div>
+
+          <!-- Empty State -->
+          <div id="emptyFolderState" class="hidden py-16 px-4 text-center flex flex-col items-center justify-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-slate-800/80 flex items-center justify-center text-slate-400">
+              <i data-lucide="folder-open" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h4 class="text-sm font-semibold text-slate-200">No se encontraron elementos</h4>
+              <p class="text-xs text-slate-500 mt-0.5">Prueba cambiando los filtros de búsqueda o selecciona otra carpeta.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Explorer Footer Status -->
+        <div class="px-4 py-2.5 bg-slate-950/70 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+          <div id="currentFolderSummary">Mostrando 0 elementos</div>
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-mega-500"></span>
+              Descifrado AES-128/CTR en memoria
+            </span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- FILE PREVIEW & DOWNLOAD MODAL -->
+  <div id="filePreviewModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <!-- Modal Header -->
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div id="modalFileIcon" class="w-10 h-10 rounded-xl bg-mega-500/15 text-mega-400 flex items-center justify-center shrink-0">
+            <i data-lucide="file" class="w-5 h-5"></i>
+          </div>
+          <div class="min-w-0">
+            <h3 id="modalFileName" class="font-semibold text-sm sm:text-base text-white truncate">archivo.ext</h3>
+            <p id="modalFileMeta" class="text-xs text-slate-400">Tamaño • Tipo • Fecha</p>
+          </div>
+        </div>
+        <button id="btnClosePreviewModal" type="button" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body / Preview Area -->
+      <div class="p-5 overflow-y-auto flex-1 space-y-4">
+        <!-- Preview Viewport -->
+        <div id="modalPreviewViewport" class="bg-slate-950 border border-slate-800 rounded-xl min-h-[240px] flex flex-col items-center justify-center p-4 relative overflow-hidden">
+          <!-- Populated dynamically when previewing -->
+        </div>
+
+        <!-- Download / Decryption Progress Bar (Hidden until active) -->
+        <div id="modalProgressContainer" class="hidden bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span id="modalProgressLabel" class="text-slate-200 font-medium flex items-center gap-2">
+              <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-mega-400"></i>
+              Descifrando bloques desde MEGA...
+            </span>
+            <span id="modalProgressPercent" class="font-mono text-mega-400">0%</span>
+          </div>
+          <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+            <div id="modalProgressBar" class="h-full bg-gradient-to-r from-mega-600 to-mega-400 w-0 transition-all duration-200"></div>
+          </div>
+        </div>
+
+        <!-- Technical Metadata Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+          <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
+            <span class="text-slate-500 block">ID de Nodo</span>
+            <code id="modalNodeId" class="text-slate-200 font-mono truncate block mt-0.5">—</code>
+          </div>
+          <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
+            <span class="text-slate-500 block">Tamaño Exacto</span>
+            <span id="modalExactBytes" class="text-slate-200 font-mono truncate block mt-0.5">—</span>
+          </div>
+          <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
+            <span class="text-slate-500 block">Ruta Interna</span>
+            <span id="modalInternalPath" class="text-slate-200 truncate block mt-0.5">—</span>
+          </div>
+          <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
+            <span class="text-slate-500 block">Estado Cifrado</span>
+            <span class="text-emerald-400 font-medium block mt-0.5">AES-128 Verificado</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer Actions -->
+      <div class="px-5 py-3.5 bg-slate-950/90 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <button
+          id="btnPreviewInModal"
+          type="button"
+          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition cursor-pointer"
+        >
+          <i data-lucide="eye" class="w-4 h-4 text-sky-400"></i>
+          <span>Previsualizar en Navegador</span>
+        </button>
+
+        <div class="flex items-center gap-2.5">
+          <button
+            id="btnDownloadDirectModal"
+            type="button"
+            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-mega-600 to-mega-500 hover:from-mega-500 hover:to-mega-400 text-white shadow-lg shadow-mega-600/25 transition cursor-pointer"
+          >
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Descargar Archivo</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOCAL NODE.JS SERVER & CLI CODE MODAL -->
+  <div id="nodeServerModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-mega-500/15 text-mega-400 flex items-center justify-center">
+            <i data-lucide="terminal" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-semibold text-base text-white">Ejecución en Servidor Local (Node.js) y MEGA-CMD</h3>
+            <p class="text-xs text-slate-400">Alternativa sin límites de memoria del navegador para carpetas de varios Gigabytes</p>
+          </div>
+        </div>
+        <button id="btnCloseNodeModal" type="button" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-5 text-xs sm:text-sm">
+        <!-- Section 1: Node.js Script -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-200">1. Servidor Express + <code class="text-mega-400">megajs</code> (API Local)</span>
+            <button type="button" data-copy-target="codeNodeExpress" class="btn-copy-code inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              <span>Copiar código</span>
+            </button>
+          </div>
+          <pre id="codeNodeExpress" class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 font-mono text-xs overflow-x-auto leading-relaxed">// Instalar dependencias: npm install express cors megajs
+import express from 'express';
+import cors from 'cors';
+import { File } from 'megajs';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.post('/api/inspect', async (req, res) => {
+  try {
+    const { url } = req.body;
+    const folder = File.fromURL(url);
+    await folder.loadAttributes();
+
+    const serializeNode = (node) => ({
+      name: node.name,
+      size: node.size || 0,
+      directory: !!node.directory,
+      timestamp: node.timestamp,
+      children: node.children ? node.children.map(serializeNode) : undefined
+    });
+
+    res.json(serializeNode(folder));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.listen(3000, () => console.log('Servidor MEGA corriendo en http://localhost:3000'));</pre>
+        </div>
+
+        <!-- Section 2: MEGA-CMD -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-200">2. Comandos directos con <code class="text-sky-400">MEGA-CMD</code></span>
+            <button type="button" data-copy-target="codeMegaCli" class="btn-copy-code inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              <span>Copiar comandos</span>
+            </button>
+          </div>
+          <pre id="codeMegaCli" class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-emerald-300 font-mono text-xs overflow-x-auto leading-relaxed"># Listar el contenido sin descargar:
+mega-ls -l "https://mega.nz/folder/bHABmLDA#7rv6CdKTUsXxN-q9mkOhfA"
+
+# Descargar toda la carpeta de forma reanudable:
+mega-get "https://mega.nz/folder/bHABmLDA#7rv6CdKTUsXxN-q9mkOhfA" ./descargas_mega/</pre>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 bg-slate-950 border-t border-slate-800 flex justify-end">
+        <button id="btnDoneNodeModal" type="button" class="px-4 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-white transition">
+          Cerrar ventana
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- Main Application Logic (ES Module with megajs) -->
+  <script type="module">
+    import { File as MegaFile } from 'https://cdn.jsdelivr.net/npm/megajs@1.3.2/dist/main.browser-es.mjs';
+
+    // --- APPLICATION STATE ---
+    const state = {
+      rootNode: null,        // Normalized root folder object
+      currentFolder: null,   // Currently selected folder node in explorer
+      nodeMap: new Map(),    // Map of internal id -> normalized node
+      viewMode: 'table',     // 'table' | 'grid'
+      searchQuery: '',
+      categoryFilter: 'all',
+      sortField: 'name',     // 'name' | 'size' | 'type' | 'date'
+      sortAsc: true,
+      recursiveView: false,
+      expandAllTree: true,
+      isDemoMode: false,
+      activeModalFile: null,
+      activeBlobUrl: null,
+      corsMode: 'direct',    // 'direct' | 'proxy'
+    };
+
+    // Proxy fetch requests when CORS mode is enabled
+    const originalFetch = window.fetch;
+    window.fetch = async function(input, init) {
+      const url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+      if (state.corsMode === 'proxy' && url.includes('mega.co.nz')) {
+        const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        if (typeof input === 'string') {
+          return originalFetch(proxiedUrl, init);
+        }
+        return originalFetch(new Request(proxiedUrl, input));
+      }
+      return originalFetch(input, init);
+    };
+
+    // --- DOM ELEMENTS ---
+    const els = {
+      form: document.getElementById('megaUrlForm'),
+      urlInput: document.getElementById('megaUrlInput'),
+      btnClearUrl: document.getElementById('btnClearUrl'),
+      btnSubmitUrl: document.getElementById('btnSubmitUrl'),
+      btnOpenExternal: document.getElementById('btnOpenExternal'),
+      detectedKeyBadge: document.getElementById('detectedKeyBadge'),
+      detectedIdBadge: document.getElementById('detectedIdBadge'),
+      corsModeSelect: document.getElementById('corsModeSelect'),
+      statusMessageInline: document.getElementById('statusMessageInline'),
+      connectionBadge: document.getElementById('connectionBadge'),
+
+      errorBanner: document.getElementById('errorBanner'),
+      errorBannerTitle: document.getElementById('errorBannerTitle'),
+      errorBannerDesc: document.getElementById('errorBannerDesc'),
+      btnRetryLoad: document.getElementById('btnRetryLoad'),
+      btnBannerDemo: document.getElementById('btnBannerDemo'),
+
+      loadingSection: document.getElementById('loadingSection'),
+      loadingTitle: document.getElementById('loadingTitle'),
+      loadingSubtitle: document.getElementById('loadingSubtitle'),
+
+      statRootName: document.getElementById('statRootName'),
+      statSourceType: document.getElementById('statSourceType'),
+      statTotalSize: document.getElementById('statTotalSize'),
+      statLargestFile: document.getElementById('statLargestFile'),
+      statFileCount: document.getElementById('statFileCount'),
+      statFolderCount: document.getElementById('statFolderCount'),
+      statTopCategory: document.getElementById('statTopCategory'),
+      distributionBar: document.getElementById('distributionBar'),
+      distributionLegend: document.getElementById('distributionLegend'),
+
+      directoryTreeContainer: document.getElementById('directoryTreeContainer'),
+      btnExpandAllTree: document.getElementById('btnExpandAllTree'),
+      breadcrumbsNav: document.getElementById('breadcrumbsNav'),
+      chkRecursiveView: document.getElementById('chkRecursiveView'),
+      btnViewTable: document.getElementById('btnViewTable'),
+      btnViewGrid: document.getElementById('btnViewGrid'),
+
+      searchInput: document.getElementById('searchInput'),
+      btnClearSearch: document.getElementById('btnClearSearch'),
+      filterCategorySelect: document.getElementById('filterCategorySelect'),
+      sortFieldSelect: document.getElementById('sortFieldSelect'),
+      btnSortOrder: document.getElementById('btnSortOrder'),
+
+      filesTableView: document.getElementById('filesTableView'),
+      filesTableBody: document.getElementById('filesTableBody'),
+      filesGridView: document.getElementById('filesGridView'),
+      emptyFolderState: document.getElementById('emptyFolderState'),
+      currentFolderSummary: document.getElementById('currentFolderSummary'),
+
+      btnDemoMode: document.getElementById('btnDemoMode'),
+      btnExportTree: document.getElementById('btnExportTree'),
+      btnOpenNodeModal: document.getElementById('btnOpenNodeModal'),
+
+      // Modals
+      filePreviewModal: document.getElementById('filePreviewModal'),
+      modalFileIcon: document.getElementById('modalFileIcon'),
+      modalFileName: document.getElementById('modalFileName'),
+      modalFileMeta: document.getElementById('modalFileMeta'),
+      modalPreviewViewport: document.getElementById('modalPreviewViewport'),
+      modalProgressContainer: document.getElementById('modalProgressContainer'),
+      modalProgressLabel: document.getElementById('modalProgressLabel'),
+      modalProgressPercent: document.getElementById('modalProgressPercent'),
+      modalProgressBar: document.getElementById('modalProgressBar'),
+      modalNodeId: document.getElementById('modalNodeId'),
+      modalExactBytes: document.getElementById('modalExactBytes'),
+      modalInternalPath: document.getElementById('modalInternalPath'),
+      btnClosePreviewModal: document.getElementById('btnClosePreviewModal'),
+      btnPreviewInModal: document.getElementById('btnPreviewInModal'),
+      btnDownloadDirectModal: document.getElementById('btnDownloadDirectModal'),
+
+      nodeServerModal: document.getElementById('nodeServerModal'),
+      btnCloseNodeModal: document.getElementById('btnCloseNodeModal'),
+      btnDoneNodeModal: document.getElementById('btnDoneNodeModal'),
+
+      toastContainer: document.getElementById('toastContainer'),
+    };
+
+    // --- UTILITY FUNCTIONS ---
+    function formatBytes(bytes) {
+      if (!bytes || bytes <= 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
+    }
+
+    function formatDate(timestampSec) {
+      if (!timestampSec) return '—';
+      try {
+        const d = new Date(timestampSec * 1000);
+        return d.toLocaleDateString('es-ES', {
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit'
+        });
+      } catch {
+        return '—';
+      }
+    }
+
+    function getFileExtension(name = '') {
+      const parts = name.split('.');
+      return parts.length > 1 ? parts.pop().toLowerCase() : '';
+    }
+
+    function classifyFile(name = '', isDirectory = false) {
+      if (isDirectory) return 'folder';
+      const ext = getFileExtension(name);
+      const map = {
+        image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'],
+        video: ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'm4v'],
+        audio: ['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'],
+        document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'epub'],
+        archive: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'iso'],
+        code: ['js', 'ts', 'py', 'html', 'css', 'json', 'md', 'txt', 'xml', 'yml', 'yaml', 'sh', 'sql', 'csv', 'c', 'cpp']
+      };
+      for (const [cat, exts] of Object.entries(map)) {
+        if (exts.includes(ext)) return cat;
+      }
+      return 'other';
+    }
+
+    function getCategoryMeta(category) {
+      const meta = {
+        folder:   { label: 'Carpeta',    icon: 'folder',       color: 'text-amber-400',   bg: 'bg-amber-500/15',   bar: 'bg-amber-400' },
+        image:    { label: 'Imagen',     icon: 'image',        color: 'text-pink-400',    bg: 'bg-pink-500/15',    bar: 'bg-pink-500' },
+        video:    { label: 'Video',      icon: 'film',         color: 'text-purple-400',  bg: 'bg-purple-500/15',  bar: 'bg-purple-500' },
+        audio:    { label: 'Audio',      icon: 'music',        color: 'text-cyan-400',    bg: 'bg-cyan-500/15',    bar: 'bg-cyan-400' },
+        document: { label: 'Documento',  icon: 'file-text',    color: 'text-sky-400',     bg: 'bg-sky-500/15',     bar: 'bg-sky-500' },
+        archive:  { label: 'Comprimido', icon: 'archive',      color: 'text-orange-400',  bg: 'bg-orange-500/15',  bar: 'bg-orange-500' },
+        code:     { label: 'Código/Txt', icon: 'file-code',    color: 'text-emerald-400', bg: 'bg-emerald-500/15', bar: 'bg-emerald-500' },
+        other:    { label: 'Archivo',    icon: 'file',         color: 'text-slate-300',   bg: 'bg-slate-700/40',   bar: 'bg-slate-500' },
+      };
+      return meta[category] || meta.other;
+    }
+
+    function getMimeType(name = '') {
+      const ext = getFileExtension(name);
+      const mimes = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+        mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+        mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac',
+        pdf: 'application/pdf',
+        json: 'application/json', txt: 'text/plain', md: 'text/plain', js: 'text/plain', py: 'text/plain', html: 'text/plain', css: 'text/plain', csv: 'text/plain'
+      };
+      return mimes[ext] || 'application/octet-stream';
+    }
+
+    function showToast(message, type = 'info') {
+      const colors = {
+        info: 'border-slate-700 bg-slate-900/95 text-slate-100',
+        success: 'border-emerald-500/40 bg-emerald-950/90 text-emerald-100',
+        error: 'border-red-500/40 bg-red-950/90 text-red-100',
+      };
+      const icons = {
+        info: 'info',
+        success: 'check-circle-2',
+        error: 'alert-circle'
+      };
+      const toast = document.createElement('div');
+      toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl border shadow-xl text-xs font-medium transition-all duration-300 ${colors[type] || colors.info}`;
+      toast.innerHTML = `
+        <i data-lucide="${icons[type] || 'info'}" class="w-4 h-4 shrink-0"></i>
+        <span class="flex-1">${message}</span>
+      `;
+      els.toastContainer.appendChild(toast);
+      lucide.createIcons({ attrs: { class: 'w-4 h-4' }, nameAttr: 'data-lucide' });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3600);
+    }
+
+    function parseUrlBadges(urlStr) {
+      try {
+        const u = new URL(urlStr.trim());
+        const hash = u.hash ? u.hash.replace('#', '') : 'No detectada';
+        const pathParts = u.pathname.split('/').filter(Boolean);
+        const id = pathParts.length >= 2 ? pathParts[1] : (pathParts[0] || '—');
+        els.detectedKeyBadge.textContent = hash ? (hash.length > 24 ? hash.slice(0, 24) + '…' : hash) : 'Falta #clave';
+        els.detectedIdBadge.textContent = id;
+        els.btnOpenExternal.href = urlStr.trim();
+      } catch {
+        els.detectedKeyBadge.textContent = 'URL inválida';
+        els.detectedIdBadge.textContent = '—';
+      }
+    }
+
+    // --- TREE NORMALIZATION ---
+    let idCounter = 1;
+    function normalizeMegaTree(rawNode, parentId = null, parentPath = '') {
+      const id = `node_${idCounter++}`;
+      const isDir = Boolean(rawNode.directory || Array.isArray(rawNode.children));
+      const name = rawNode.name || (parentId === null ? 'Carpeta MEGA' : 'Elemento sin nombre');
+      const currentPath = parentPath ? `${parentPath}/${name}` : `/${name}`;
+      const category = classifyFile(name, isDir);
+
+      const normalized = {
+        id,
+        nodeId: rawNode.nodeId || rawNode.downloadId || id,
+        name,
+        isDirectory: isDir,
+        size: isDir ? 0 : (Number(rawNode.size) || 0),
+        timestamp: rawNode.timestamp || Math.floor(Date.now() / 1000),
+        category,
+        parentId,
+        path: currentPath,
+        megaRef: rawNode.megaRef || rawNode, // Reference to actual megajs File object
+        demoContent: rawNode.demoContent || null,
+        children: []
+      };
+
+      state.nodeMap.set(id, normalized);
+
+      if (isDir && Array.isArray(rawNode.children)) {
+        normalized.children = rawNode.children.map(child => normalizeMegaTree(child, id, currentPath));
+        // Compute recursive folder size
+        normalized.size = normalized.children.reduce((acc, c) => acc + (c.size || 0), 0);
+      }
+
+      return normalized;
+    }
+
+    // --- LOAD REAL MEGA FOLDER ---
+    async function inspectMegaUrl(urlStr) {
+      const cleanUrl = urlStr.trim();
+      if (!cleanUrl) return;
+
+      parseUrlBadges(cleanUrl);
+      els.errorBanner.classList.add('hidden');
+      els.loadingSection.classList.remove('hidden');
+      els.btnSubmitUrl.disabled = true;
+      els.loadingTitle.textContent = 'Conectando con los servidores de MEGA...';
+      els.loadingSubtitle.textContent = `Resolviendo contenedor y descifrando árbol de nodos con llave privada...`;
+      els.statusMessageInline.innerHTML = `<span class="text-mega-400 animate-pulse">Descifrando metadatos...</span>`;
+
+      try {
+        const folder = MegaFile.fromURL(cleanUrl);
+        await folder.loadAttributes();
+
+        state.isDemoMode = false;
+        state.nodeMap.clear();
+        idCounter = 1;
+
+        // Handle single file link vs folder link
+        let rootPayload = folder;
+        if (!folder.directory && !folder.children) {
+          rootPayload = {
+            name: `Contenedor (${folder.name || 'Archivo Único'})`,
+            directory: true,
+            timestamp: folder.timestamp,
+            children: [folder]
+          };
+        }
+
+        const rootNormalized = normalizeMegaTree(rootPayload);
+        state.rootNode = rootNormalized;
+        state.currentFolder = rootNormalized;
+
+        els.connectionBadge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        els.connectionBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Conectado a MEGA`;
+        els.statusMessageInline.innerHTML = `<span class="text-emerald-400">Metadatos descifrados correctamente</span>`;
+
+        renderAll();
+        showToast(`Carpeta "${rootNormalized.name}" cargada con éxito.`, 'success');
+      } catch (err) {
+        console.error('Error al cargar MEGA URL:', err);
+        els.errorBanner.classList.remove('hidden');
+        els.errorBannerTitle.textContent = 'No fue posible leer directamente el contenedor de MEGA';
+        els.errorBannerDesc.textContent = `Detalle técnico: ${err.message || 'El enlace no existe, la carpeta fue dada de baja o el navegador bloqueó la conexión a g.api.mega.co.nz.'} Puedes abrir el enlace directamente en MEGA o probar el explorador con el Modo Demostración.`;
+        els.statusMessageInline.innerHTML = `<span class="text-red-400">Error al leer contenedor</span>`;
+        showToast('Error al conectar con MEGA. Revisa el aviso en pantalla.', 'error');
+      } finally {
+        els.loadingSection.classList.add('hidden');
+        els.btnSubmitUrl.disabled = false;
+      }
+    }
+
+    // --- DEMO MODE DATA (Fallback or testing) ---
+    function loadDemoMode() {
+      state.isDemoMode = true;
+      state.nodeMap.clear();
+      idCounter = 1;
+      els.errorBanner.classList.add('hidden');
+
+      const now = Math.floor(Date.now() / 1000);
+      const demoTree = {
+        name: 'Carpeta_Compartida_bHABmLDA (Demo)',
+        directory: true,
+        timestamp: now - 86400 * 5,
+        children: [
+          {
+            name: '01_Documentacion_Proyecto',
+            directory: true,
+            timestamp: now - 86400 * 4,
+            children: [
+              {
+                name: 'LEEME_Instrucciones.md',
+                directory: false,
+                size: 4280,
+                timestamp: now - 86400 * 2,
+                demoContent: `# Carpeta Compartida MEGA (bHABmLDA)\n\nEste es un archivo interactivo de demostración cargado para el ID bHABmLDA.\n\n## Contenido del paquete\n- Documentación técnica y guías en PDF\n- Recursos multimedia de prueba\n- Scripts y configuraciones\n\nPuedes navegar el árbol de directorios, aplicar filtros y previsualizar o descargar archivos.`
+              },
+              {
+                name: 'Arquitectura_Sistema_Cloud.pdf',
+                directory: false,
+                size: 3458920,
+                timestamp: now - 86400 * 4,
+                demoContent: 'Documento PDF simulado para previsualización de metadatos.'
+              },
+              {
+                name: 'Presupuesto_Recursos_2025.xlsx',
+                directory: false,
+                size: 845120,
+                timestamp: now - 86400 * 3
+              }
+            ]
+          },
+          {
+            name: '02_Multimedia_y_Assets',
+            directory: true,
+            timestamp: now - 86400 * 3,
+            children: [
+              {
+                name: 'Preview_Dashboard_Dark.svg',
+                directory: false,
+                size: 18432,
+                timestamp: now - 86400,
+                demoContent: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 320" width="100%" height="100%">
+                  <rect width="600" height="320" rx="16" fill="#0f172a"/>
+                  <rect x="24" y="24" width="552" height="48" rx="8" fill="#1e293b"/>
+                  <circle cx="52" cy="48" r="10" fill="#f43f5e"/>
+                  <rect x="76" y="40" width="160" height="16" rx="4" fill="#94a3b8"/>
+                  <rect x="24" y="92" width="160" height="204" rx="8" fill="#1e293b"/>
+                  <rect x="204" y="92" width="372" height="96" rx="8" fill="#1e293b"/>
+                  <rect x="204" y="204" width="178" height="92" rx="8" fill="#f43f5e" fill-opacity="0.2" stroke="#f43f5e"/>
+                  <rect x="398" y="204" width="178" height="92" rx="8" fill="#0284c7" fill-opacity="0.2" stroke="#38bdf8"/>
+                  <text x="300" y="146" fill="#f8fafc" font-family="sans-serif" font-size="16" text-anchor="middle">Vista Previa Vectorial Desencriptada</text>
+                </svg>`
+              },
+              {
+                name: 'Demo_Presentacion_1080p.mp4',
+                directory: false,
+                size: 48920140,
+                timestamp: now - 86400 * 2
+              },
+              {
+                name: 'Audio_Presentacion.mp3',
+                directory: false,
+                size: 9437184,
+                timestamp: now - 86400 * 2
+              }
+            ]
+          },
+          {
+            name: '03_Codigo_Fuente_y_Backups',
+            directory: true,
+            timestamp: now - 86400,
+            children: [
+              {
+                name: 'configuracion_nodos.json',
+                directory: false,
+                size: 2150,
+                timestamp: now - 3600 * 12,
+                demoContent: JSON.stringify({
+                  folderId: "bHABmLDA",
+                  encryption: "AES-128-CTR",
+                  nodesVerified: true,
+                  mirrors: ["eu-central-1", "us-east-1"],
+                  generatedAt: new Date().toISOString()
+                }, null, 2)
+              },
+              {
+                name: 'Release_Build_v2.4.0.zip',
+                directory: false,
+                size: 128450560,
+                timestamp: now - 3600 * 5
+              }
+            ]
+          },
+          {
+            name: 'checksums_sha256.txt',
+            directory: false,
+            size: 1240,
+            timestamp: now - 1800,
+            demoContent: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  Release_Build_v2.4.0.zip\n8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4  Arquitectura_Sistema_Cloud.pdf`
+          }
+        ]
+      };
+
+      const rootNormalized = normalizeMegaTree(demoTree);
+      state.rootNode = rootNormalized;
+      state.currentFolder = rootNormalized;
+
+      els.connectionBadge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30';
+      els.connectionBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Modo Demostración`;
+      els.statusMessageInline.innerHTML = `<span class="text-amber-400">Explorando datos de demostración</span>`;
+
+      renderAll();
+      showToast('Modo demostración activado con árbol de ejemplo.', 'info');
+    }
+
+    // --- STATISTICS CALCULATION & RENDER ---
+    function computeTreeStats(root) {
+      let fileCount = 0;
+      let folderCount = 0;
+      let largestFile = null;
+      const catBytes = { image: 0, video: 0, audio: 0, document: 0, archive: 0, code: 0, other: 0 };
+      const catCounts = { image: 0, video: 0, audio: 0, document: 0, archive: 0, code: 0, other: 0 };
+
+      function walk(node) {
+        if (node.isDirectory) {
+          if (node !== root) folderCount++;
+          node.children.forEach(walk);
+        } else {
+          fileCount++;
+          const cat = catBytes[node.category] !== undefined ? node.category : 'other';
+          catBytes[cat] += node.size;
+          catCounts[cat]++;
+          if (!largestFile || node.size > largestFile.size) {
+            largestFile = node;
+          }
+        }
+      }
+
+      if (root) walk(root);
+      return { fileCount, folderCount, largestFile, catBytes, catCounts, totalBytes: root ? root.size : 0 };
+    }
+
+    function renderStats() {
+      if (!state.rootNode) return;
+      const stats = computeTreeStats(state.rootNode);
+
+      els.statRootName.textContent = state.rootNode.name;
+      els.statRootName.title = state.rootNode.name;
+      els.statSourceType.textContent = state.isDemoMode ? 'Simulación interactiva en memoria' : 'Metadatos reales descifrados desde MEGA';
+
+      els.statTotalSize.textContent = formatBytes(stats.totalBytes);
+      els.statLargestFile.textContent = stats.largestFile
+        ? `Mayor: ${stats.largestFile.name} (${formatBytes(stats.largestFile.size)})`
+        : 'Sin archivos individuales';
+
+      els.statFileCount.textContent = `${stats.fileCount} ${stats.fileCount === 1 ? 'archivo' : 'archivos'}`;
+      els.statFolderCount.textContent = `(${stats.folderCount} ${stats.folderCount === 1 ? 'carpeta' : 'carpetas'})`;
+
+      // Distribution bar
+      const entries = Object.entries(stats.catBytes).filter(([, bytes]) => bytes > 0).sort((a, b) => b[1] - a[1]);
+      if (entries.length === 0 || stats.totalBytes === 0) {
+        els.distributionBar.innerHTML = `<div class="h-full bg-slate-700 w-full rounded-full"></div>`;
+        els.statTopCategory.textContent = 'Vacío';
+        els.distributionLegend.textContent = 'Sin datos de tamaño';
+      } else {
+        const [topCat, topBytes] = entries[0];
+        const topMeta = getCategoryMeta(topCat);
+        const topPct = Math.round((topBytes / stats.totalBytes) * 100);
+        els.statTopCategory.textContent = `${topMeta.label} (${topPct}%)`;
+
+        els.distributionBar.innerHTML = entries.map(([cat, bytes]) => {
+          const pct = Math.max(4, Math.round((bytes / stats.totalBytes) * 100));
+          const meta = getCategoryMeta(cat);
+          return `<div class="h-full ${meta.bar} first:rounded-l-full last:rounded-r-full transition-all" style="width:${pct}%" title="${meta.label}: ${formatBytes(bytes)}"></div>`;
+        }).join('');
+
+        els.distributionLegend.innerHTML = entries.slice(0, 3).map(([cat, bytes]) => {
+          const meta = getCategoryMeta(cat);
+          return `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full ${meta.bar}"></span>${meta.label}: ${formatBytes(bytes)}</span>`;
+        }).join('');
+      }
+    }
+
+    // --- SIDEBAR TREE RENDER ---
+    function renderDirectoryTree() {
+      if (!state.rootNode) return;
+
+      function buildBranchHtml(folderNode, depth = 0) {
+        const isSelected = state.currentFolder && state.currentFolder.id === folderNode.id;
+        const subFolders = folderNode.children.filter(c => c.isDirectory);
+        const paddingLeft = depth * 14 + 8;
+
+        const subHtml = (state.expandAllTree && subFolders.length > 0)
+          ? `<div class="space-y-0.5 mt-0.5">${subFolders.map(sub => buildBranchHtml(sub, depth + 1)).join('')}</div>`
+          : '';
+
+        return `
+          <div>
+            <button
+              type="button"
+              data-folder-id="${folderNode.id}"
+              style="padding-left: ${paddingLeft}px"
+              class="tree-folder-btn w-full text-left py-1.5 pr-2.5 rounded-lg flex items-center justify-between gap-2 transition text-xs ${
+                isSelected
+                  ? 'bg-mega-500/20 text-white font-semibold border border-mega-500/30'
+                  : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+              }"
+            >
+              <span class="flex items-center gap-2 min-w-0">
+                <i data-lucide="${isSelected ? 'folder-open' : 'folder'}" class="w-4 h-4 ${isSelected ? 'text-mega-400' : 'text-amber-400'} shrink-0"></i>
+                <span class="truncate">${folderNode.name}</span>
+              </span>
+              <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-950/60 text-slate-400 shrink-0">${folderNode.children.length}</span>
+            </button>
+            ${subHtml}
+          </div>
+        `;
+      }
+
+      els.directoryTreeContainer.innerHTML = buildBranchHtml(state.rootNode, 0);
+      lucide.createIcons();
+
+      els.directoryTreeContainer.querySelectorAll('.tree-folder-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const targetId = btn.getAttribute('data-folder-id');
+          const folder = state.nodeMap.get(targetId);
+          if (folder && folder.isDirectory) {
+            state.currentFolder = folder;
+            renderAll();
+          }
+        });
+      });
+    }
+
+    // --- BREADCRUMBS RENDER ---
+    function renderBreadcrumbs() {
+      if (!state.currentFolder) return;
+      const chain = [];
+      let curr = state.currentFolder;
+      while (curr) {
+        chain.unshift(curr);
+        curr = curr.parentId ? state.nodeMap.get(curr.parentId) : null;
+      }
+
+      els.breadcrumbsNav.innerHTML = chain.map((node, idx) => {
+        const isLast = idx === chain.length - 1;
+        return `
+          <div class="flex items-center gap-1">
+            ${idx > 0 ? '<i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-600"></i>' : ''}
+            <button
+              type="button"
+              data-crumb-id="${node.id}"
+              class="crumb-btn px-2 py-1 rounded-lg transition flex items-center gap-1.5 ${
+                isLast
+                  ? 'bg-slate-800 text-white font-semibold'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              }"
+            >
+              ${idx === 0 ? '<i data-lucide="home" class="w-3.5 h-3.5 text-mega-400"></i>' : ''}
+              <span class="max-w-[160px] truncate">${node.name}</span>
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+
+      els.breadcrumbsNav.querySelectorAll('.crumb-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-crumb-id');
+          const node = state.nodeMap.get(id);
+          if (node) {
+            state.currentFolder = node;
+            renderAll();
+          }
+        });
+      });
+    }
+
+    // --- FILTERING & SORTING ITEMS ---
+    function getVisibleItems() {
+      if (!state.currentFolder) return [];
+
+      let pool = [];
+      const useRecursive = state.recursiveView || state.searchQuery.trim().length > 0;
+
+      if (useRecursive) {
+        function collectAll(folder) {
+          folder.children.forEach(child => {
+            pool.push(child);
+            if (child.isDirectory) collectAll(child);
+          });
+        }
+        collectAll(state.currentFolder);
+      } else {
+        pool = [...state.currentFolder.children];
+      }
+
+      // Filter by search query
+      if (state.searchQuery.trim()) {
+        const q = state.searchQuery.trim().toLowerCase();
+        pool = pool.filter(item => item.name.toLowerCase().includes(q) || item.path.toLowerCase().includes(q));
+      }
+
+      // Filter by category
+      if (state.categoryFilter !== 'all') {
+        pool = pool.filter(item => item.category === state.categoryFilter);
+      }
+
+      // Sort items (Folders first unless sorting by size)
+      pool.sort((a, b) => {
+        if (state.sortField !== 'size' && a.isDirectory !== b.isDirectory) {
+          return a.isDirectory ? -1 : 1;
+        }
+        let comparison = 0;
+        if (state.sortField === 'name') {
+          comparison = a.name.localeCompare(b.name, 'es', { numeric: true });
+        } else if (state.sortField === 'size') {
+          comparison = a.size - b.size;
+        } else if (state.sortField === 'type') {
+          comparison = a.category.localeCompare(b.category);
+        } else if (state.sortField === 'date') {
+          comparison = (a.timestamp || 0) - (b.timestamp || 0);
+        }
+        return state.sortAsc ? comparison : -comparison;
+      });
+
+      return pool;
+    }
+
+    // --- RENDER TABLE & GRID VIEWS ---
+    function renderExplorerItems() {
+      const items = getVisibleItems();
+      const totalBytesVisible = items.reduce((acc, i) => acc + (i.isDirectory ? 0 : i.size), 0);
+
+      els.currentFolderSummary.textContent = `Mostrando ${items.length} ${items.length === 1 ? 'elemento' : 'elementos'} en "${state.currentFolder?.name || 'Raíz'}" (${formatBytes(totalBytesVisible)})`;
+
+      if (items.length === 0) {
+        els.filesTableView.classList.add('hidden');
+        els.filesGridView.classList.add('hidden');
+        els.emptyFolderState.classList.remove('hidden');
+        return;
+      }
+
+      els.emptyFolderState.classList.add('hidden');
+
+      if (state.viewMode === 'table') {
+        els.filesTableView.classList.remove('hidden');
+        els.filesGridView.classList.add('hidden');
+
+        els.filesTableBody.innerHTML = items.map(item => {
+          const meta = getCategoryMeta(item.category);
+          const subtext = item.isDirectory
+            ? `${item.children.length} elementos dentro`
+            : (state.recursiveView || state.searchQuery ? item.path : getFileExtension(item.name).toUpperCase() || 'Archivo');
+
+          return `
+            <tr data-item-id="${item.id}" class="explorer-item-row group hover:bg-slate-800/60 transition cursor-pointer">
+              <td class="py-3 pl-4 pr-2">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-xl ${meta.bg} ${meta.color} flex items-center justify-center shrink-0">
+                    <i data-lucide="${meta.icon}" class="w-4 h-4"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="font-medium text-slate-100 group-hover:text-mega-400 transition truncate max-w-[220px] sm:max-w-[360px] md:max-w-[460px]" title="${item.name}">
+                      ${item.name}
+                    </div>
+                    <div class="text-[11px] text-slate-500 truncate max-w-[240px] sm:max-w-[380px]">${subtext}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3 px-3 hidden sm:table-cell">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${meta.bg} ${meta.color}">
+                  ${meta.label}
+                </span>
+              </td>
+              <td class="py-3 px-3 text-right font-mono text-xs text-slate-300 whitespace-nowrap">
+                ${formatBytes(item.size)}
+              </td>
+              <td class="py-3 px-3 hidden md:table-cell text-right text-xs text-slate-400 whitespace-nowrap">
+                ${formatDate(item.timestamp)}
+              </td>
+              <td class="py-3 pl-2 pr-4 text-right whitespace-nowrap">
+                <button
+                  type="button"
+                  data-action-id="${item.id}"
+                  class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-mega-500 text-slate-200 hover:text-white transition"
+                >
+                  <i data-lucide="${item.isDirectory ? 'folder-open' : 'eye'}" class="w-3.5 h-3.5"></i>
+                  <span class="hidden sm:inline">${item.isDirectory ? 'Abrir' : 'Inspeccionar'}</span>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } else {
+        els.filesTableView.classList.add('hidden');
+        els.filesGridView.classList.remove('hidden');
+
+        els.filesGridView.innerHTML = items.map(item => {
+          const meta = getCategoryMeta(item.category);
+          return `
+            <div data-item-id="${item.id}" class="explorer-item-card group bg-slate-950/70 hover:bg-slate-800/70 border border-slate-800/90 hover:border-mega-500/40 rounded-2xl p-4 flex flex-col justify-between gap-3 transition cursor-pointer">
+              <div class="flex items-start justify-between gap-2">
+                <div class="w-11 h-11 rounded-xl ${meta.bg} ${meta.color} flex items-center justify-center">
+                  <i data-lucide="${meta.icon}" class="w-5 h-5"></i>
+                </div>
+                <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-900 text-slate-300 border border-slate-800">
+                  ${formatBytes(item.size)}
+                </span>
+              </div>
+              <div>
+                <h4 class="font-medium text-sm text-white group-hover:text-mega-400 transition truncate" title="${item.name}">
+                  ${item.name}
+                </h4>
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                  ${item.isDirectory ? `${item.children.length} elementos` : `${meta.label} • ${formatDate(item.timestamp)}`}
+                </p>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      lucide.createIcons();
+
+      // Attach click listeners to rows / cards
+      const clickables = document.querySelectorAll('.explorer-item-row, .explorer-item-card');
+      clickables.forEach(el => {
+        el.addEventListener('click', () => {
+          const id = el.getAttribute('data-item-id');
+          const item = state.nodeMap.get(id);
+          if (!item) return;
+          if (item.isDirectory) {
+            state.currentFolder = item;
+            renderAll();
+          } else {
+            openFileModal(item);
+          }
+        });
+      });
+    }
+
+    function renderAll() {
+      renderStats();
+      renderDirectoryTree();
+      renderBreadcrumbs();
+      renderExplorerItems();
+    }
+
+    // --- FILE PREVIEW & DIRECT DOWNLOAD MODAL ---
+    function cleanupActiveBlob() {
+      if (state.activeBlobUrl) {
+        URL.revokeObjectURL(state.activeBlobUrl);
+        state.activeBlobUrl = null;
+      }
+    }
+
+    function openFileModal(fileNode) {
+      cleanupActiveBlob();
+      state.activeModalFile = fileNode;
+      const meta = getCategoryMeta(fileNode.category);
+
+      els.modalFileIcon.className = `w-10 h-10 rounded-xl ${meta.bg} ${meta.color} flex items-center justify-center shrink-0`;
+      els.modalFileIcon.innerHTML = `<i data-lucide="${meta.icon}" class="w-5 h-5"></i>`;
+      els.modalFileName.textContent = fileNode.name;
+      els.modalFileMeta.textContent = `${formatBytes(fileNode.size)} • ${meta.label} • Modificado: ${formatDate(fileNode.timestamp)}`;
+
+      els.modalNodeId.textContent = fileNode.nodeId;
+      els.modalExactBytes.textContent = `${fileNode.size.toLocaleString('es-ES')} bytes`;
+      els.modalInternalPath.textContent = fileNode.path;
+      els.modalInternalPath.title = fileNode.path;
+
+      els.modalProgressContainer.classList.add('hidden');
+      els.modalProgressBar.style.width = '0%';
+
+      els.modalPreviewViewport.innerHTML = `
+        <div class="text-center max-w-md space-y-2 py-6">
+          <div class="w-12 h-12 rounded-2xl ${meta.bg} ${meta.color} flex items-center justify-center mx-auto">
+            <i data-lucide="${meta.icon}" class="w-6 h-6"></i>
+          </div>
+          <h4 class="text-sm font-semibold text-white">Archivo listo para desencriptar</h4>
+          <p class="text-xs text-slate-400">
+            Haz clic en <strong>"Previsualizar en Navegador"</strong> para desencriptar el contenido en memoria o en <strong>"Descargar Archivo"</strong> para guardarlo en tu equipo.
+          </p>
+        </div>
+      `;
+
+      els.filePreviewModal.classList.remove('hidden');
+      els.filePreviewModal.classList.add('flex');
+      lucide.createIcons();
+    }
+
+    async function fetchDecryptedBuffer(fileNode) {
+      els.modalProgressContainer.classList.remove('hidden');
+      els.modalProgressLabel.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-mega-400"></i> Descifrando flujo de datos AES desde MEGA...`;
+      els.modalProgressPercent.textContent = '25%';
+      els.modalProgressBar.style.width = '25%';
+      lucide.createIcons();
+
+      if (state.isDemoMode) {
+        await new Promise(r => setTimeout(r, 450));
+        els.modalProgressPercent.textContent = '100%';
+        els.modalProgressBar.style.width = '100%';
+        const content = fileNode.demoContent || `Contenido binario simulado del archivo ${fileNode.name} (${fileNode.size} bytes).`;
+        return new TextEncoder().encode(content);
+      }
+
+      if (!fileNode.megaRef || typeof fileNode.megaRef.downloadBuffer !== 'function') {
+        throw new Error('El nodo no expone el método downloadBuffer en este entorno.');
+      }
+
+      els.modalProgressPercent.textContent = '60%';
+      els.modalProgressBar.style.width = '60%';
+
+      const buffer = await fileNode.megaRef.downloadBuffer();
+      els.modalProgressPercent.textContent = '100%';
+      els.modalProgressBar.style.width = '100%';
+      return buffer;
+    }
+
+    async function handlePreviewFile() {
+      const fileNode = state.activeModalFile;
+      if (!fileNode) return;
+
+      // Safety warning for huge files (> 35 MB) before attempting in-memory preview
+      if (!state.isDemoMode && fileNode.size > 35 * 1024 * 1024) {
+        showToast('El archivo supera 35 MB. Usa "Descargar Archivo" para guardarlo directamente.', 'info');
+      }
+
+      try {
+        els.btnPreviewInModal.disabled = true;
+        const uint8 = await fetchDecryptedBuffer(fileNode);
+        const mime = getMimeType(fileNode.name);
+        cleanupActiveBlob();
+        const blob = new Blob([uint8], { type: mime });
+        state.activeBlobUrl = URL.createObjectURL(blob);
+
+        if (fileNode.category === 'image') {
+          els.modalPreviewViewport.innerHTML = `
+            <img src="${state.activeBlobUrl}" alt="${fileNode.name}" class="max-h-[380px] w-auto object-contain rounded-lg shadow-lg" />
+          `;
+        } else if (fileNode.category === 'video') {
+          els.modalPreviewViewport.innerHTML = `
+            <video src="${state.activeBlobUrl}" controls class="max-h-[380px] w-full rounded-lg bg-black"></video>
+          `;
+        } else if (fileNode.category === 'audio') {
+          els.modalPreviewViewport.innerHTML = `
+            <div class="w-full max-w-md p-6 text-center space-y-3">
+              <p class="text-xs text-slate-300 font-medium">${fileNode.name}</p>
+              <audio src="${state.activeBlobUrl}" controls class="w-full"></audio>
+            </div>
+          `;
+        } else if (fileNode.category === 'code' || mime === 'text/plain' || mime === 'application/json') {
+          const text = new TextDecoder('utf-8').decode(uint8.slice(0, 100000));
+          els.modalPreviewViewport.innerHTML = `
+            <pre class="w-full max-h-[360px] overflow-auto p-3 text-xs font-mono text-emerald-300 bg-slate-950 rounded-lg text-left whitespace-pre-wrap"></pre>
+          `;
+          els.modalPreviewViewport.querySelector('pre').textContent = text;
+        } else {
+          els.modalPreviewViewport.innerHTML = `
+            <div class="text-center py-6 space-y-2">
+              <p class="text-xs text-emerald-400 font-medium">Buffer descifrado correctamente (${formatBytes(uint8.byteLength)})</p>
+              <p class="text-xs text-slate-400">Este formato (${getFileExtension(fileNode.name) || 'binario'}) no tiene visor nativo embebido. Haz clic en "Descargar Archivo" para abrirlo localmente.</p>
+            </div>
+          `;
+        }
+        showToast('Vista previa generada en el navegador.', 'success');
+      } catch (err) {
+        els.modalPreviewViewport.innerHTML = `
+          <div class="text-center p-4 text-xs text-red-300">
+            No se pudo previsualizar: ${err.message}
+          </div>
+        `;
+        showToast('Error al desencriptar vista previa.', 'error');
+      } finally {
+        els.btnPreviewInModal.disabled = false;
+      }
+    }
+
+    async function handleDownloadFile() {
+      const fileNode = state.activeModalFile;
+      if (!fileNode) return;
+
+      try {
+        els.btnDownloadDirectModal.disabled = true;
+        const uint8 = await fetchDecryptedBuffer(fileNode);
+        const mime = getMimeType(fileNode.name);
+        const blob = new Blob([uint8], { type: mime });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileNode.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+        showToast(`Descarga iniciada: ${fileNode.name}`, 'success');
+      } catch (err) {
+        showToast(`Error al descargar: ${err.message}`, 'error');
+      } finally {
+        els.btnDownloadDirectModal.disabled = false;
+      }
+    }
+
+    // --- EVENT LISTENERS ---
+    els.form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      inspectMegaUrl(els.urlInput.value);
+    });
+
+    els.urlInput.addEventListener('input', () => {
+      parseUrlBadges(els.urlInput.value);
+    });
+
+    els.btnClearUrl.addEventListener('click', () => {
+      els.urlInput.value = '';
+      els.urlInput.focus();
+    });
+
+    els.btnRetryLoad.addEventListener('click', () => {
+      inspectMegaUrl(els.urlInput.value);
+    });
+
+    els.btnBannerDemo.addEventListener('click', loadDemoMode);
+    els.btnDemoMode.addEventListener('click', loadDemoMode);
+
+    els.btnExpandAllTree.addEventListener('click', () => {
+      state.expandAllTree = !state.expandAllTree;
+      els.btnExpandAllTree.textContent = state.expandAllTree ? 'Contraer' : 'Expandir';
+      renderDirectoryTree();
+    });
+
+    els.chkRecursiveView.addEventListener('change', (e) => {
+      state.recursiveView = e.target.checked;
+      renderExplorerItems();
+    });
+
+    els.btnViewTable.addEventListener('click', () => {
+      state.viewMode = 'table';
+      els.btnViewTable.className = 'px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-white transition flex items-center gap-1';
+      els.btnViewGrid.className = 'px-2.5 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white transition flex items-center gap-1';
+      renderExplorerItems();
+    });
+
+    els.btnViewGrid.addEventListener('click', () => {
+      state.viewMode = 'grid';
+      els.btnViewGrid.className = 'px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-white transition flex items-center gap-1';
+      els.btnViewTable.className = 'px-2.5 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white transition flex items-center gap-1';
+      renderExplorerItems();
+    });
+
+    els.searchInput.addEventListener('input', (e) => {
+      state.searchQuery = e.target.value;
+      els.btnClearSearch.classList.toggle('hidden', !state.searchQuery);
+      renderExplorerItems();
+    });
+
+    els.btnClearSearch.addEventListener('click', () => {
+      state.searchQuery = '';
+      els.searchInput.value = '';
+      els.btnClearSearch.classList.add('hidden');
+      renderExplorerItems();
+    });
+
+    els.filterCategorySelect.addEventListener('change', (e) => {
+      state.categoryFilter = e.target.value;
+      renderExplorerItems();
+    });
+
+    els.sortFieldSelect.addEventListener('change', (e) => {
+      state.sortField = e.target.value;
+      renderExplorerItems();
+    });
+
+    els.btnSortOrder.addEventListener('click', () => {
+      state.sortAsc = !state.sortAsc;
+      renderExplorerItems();
+    });
+
+    els.corsModeSelect.addEventListener('change', (e) => {
+      state.corsMode = e.target.value;
+      showToast(`Modo de conexión: ${e.target.value === 'proxy' ? 'Proxy CORS activado' : 'Conexión directa'}`, 'info');
+      inspectMegaUrl(els.urlInput.value);
+    });
+
+    // Export JSON Tree
+    els.btnExportTree.addEventListener('click', () => {
+      if (!state.rootNode) {
+        showToast('Primero carga una carpeta para exportar su índice.', 'info');
+        return;
+      }
+      function stripNode(n) {
+        return {
+          name: n.name,
+          path: n.path,
+          isDirectory: n.isDirectory,
+          size: n.size,
+          category: n.category,
+          children: n.children ? n.children.map(stripNode) : []
+        };
+      }
+      const jsonStr = JSON.stringify(stripNode(state.rootNode), null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `indice_${state.rootNode.name.replace(/\s+/g, '_')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Índice JSON exportado correctamente.', 'success');
+    });
+
+    // Modals close / actions
+    els.btnClosePreviewModal.addEventListener('click', () => {
+      cleanupActiveBlob();
+      els.filePreviewModal.classList.add('hidden');
+      els.filePreviewModal.classList.remove('flex');
+    });
+
+    els.btnPreviewInModal.addEventListener('click', handlePreviewFile);
+    els.btnDownloadDirectModal.addEventListener('click', handleDownloadFile);
+
+    els.btnOpenNodeModal.addEventListener('click', () => {
+      els.nodeServerModal.classList.remove('hidden');
+      els.nodeServerModal.classList.add('flex');
+    });
+
+    const closeNodeModal = () => {
+      els.nodeServerModal.classList.add('hidden');
+      els.nodeServerModal.classList.remove('flex');
+    };
+    els.btnCloseNodeModal.addEventListener('click', closeNodeModal);
+    els.btnDoneNodeModal.addEventListener('click', closeNodeModal);
+
+    // Copy buttons using execCommand for iframe compatibility
+    document.querySelectorAll('.btn-copy-code').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-copy-target');
+        const codeEl = document.getElementById(targetId);
+        if (!codeEl) return;
+        const textarea = document.createElement('textarea');
+        textarea.value = codeEl.textContent;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+        showToast('Código copiado al portapapeles.', 'success');
+      });
+    });
+
+    // Initialize icons and auto-load default link
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      parseUrlBadges(els.urlInput.value);
+      inspectMegaUrl(els.urlInput.value);
+    });
+  </script>
+</body>
+</html>
